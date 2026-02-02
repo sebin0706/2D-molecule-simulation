@@ -1,0 +1,124 @@
+import pygame
+import pymunk
+import pymunk.pygame_util
+import random
+
+pygame.init()
+width,height=600,400
+screen=pygame.display.set_mode((width,height))
+clock=pygame.time.Clock()
+
+space=pymunk.Space()
+space.gravity=(0,0)
+space.on_collision(1, 1)
+
+total_impulse=0
+block_impulse=0
+block_time=0
+avg_pressure=0
+alpha=0.05
+
+speed_sum=0
+speed_sq_sum=0
+speed_samples=0
+v_avg=0
+v_rms=0
+v_ratio=0
+kT=0
+
+ratio=0
+
+block_v_sum=0
+block_v2_sum=0
+block_v_samples=0
+
+def wall_collision(arbiter,space,data):
+    global total_impulse
+    total_impulse+=arbiter.total_impulse.length
+
+handler=space.on_collision(1,2,post_solve=wall_collision)
+
+wall_length=2*(width+height)
+font=pygame.font.SysFont(None,24)
+
+num_molecules=100
+radius=5
+mass=1
+
+molecules=[]
+
+for _ in range(num_molecules):
+    body=pymunk.Body(mass,pymunk.moment_for_circle(mass,0,radius))
+    body.position=(
+        random.uniform(0,width),
+        random.uniform(0,height)
+    )
+    body.velocity=(
+        random.uniform(-200,200),
+        random.uniform(-200,200)
+    )
+    shape=pymunk.Circle(body,radius)
+    shape.elasticity=1
+    shape.friction=0
+    shape.collision_type=1
+    space.add(body,shape)
+    molecules.append(shape)
+
+walls = [
+    pymunk.Segment(space.static_body,(0,0),(width,0),2),
+    pymunk.Segment(space.static_body,(0,height),(width,height),2),
+    pymunk.Segment(space.static_body,(0,0),(0,height),2),
+    pymunk.Segment(space.static_body,(width,0),(width,height),2)
+]
+
+for wall in walls:
+    wall.elasticity=1
+    wall.friction=0
+    wall.collision_type=2
+
+space.add(*walls)
+
+draw_options=pymunk.pygame_util.DrawOptions(screen)
+
+running=True
+while running:
+    for event in pygame.event.get():
+        if event.type==pygame.QUIT:
+            running=False
+    dt=1/60.0
+    space.step(dt)
+    for shape in molecules:
+        v=shape.body.velocity.length
+        block_v_sum+=v
+        block_v2_sum+=v*v
+        block_v_samples+=1
+    pressure=total_impulse/(wall_length*dt)
+    block_impulse+=total_impulse
+    block_time+=dt
+    if block_time>=5:
+        v_avg=block_v_sum/block_v_samples
+        v_rms=(block_v2_sum/block_v_samples)**0.5
+        kT=0.5*mass*v_rms*v_rms
+        v_ratio=v_avg/v_rms
+        avg_pressure=block_impulse/(wall_length*block_time)
+        block_impulse=0
+        block_time=0
+        block_v_sum=block_v2_sum=0
+        block_v_samples=0
+        A=width*height
+        left=avg_pressure*A
+        right=num_molecules*kT
+        ratio=left/right
+    total_impulse=0
+    screen.fill((30,30,30))
+    space.debug_draw(draw_options)
+    text=font.render(f"P_avg:{avg_pressure:.1f}",True,(255,255,255))
+    screen.blit(text,(10,10))
+    text=font.render(
+    f"v_avg={v_avg:.2f} v_rms={v_rms:.2f} v_ratio={v_ratio:.2f} kT={kT:.2f}",True,(255, 255, 255))
+    screen.blit(text,(10,30))
+    text=font.render(f"PA/NkT={ratio:.3f}",True,(255,255,255))
+    screen.blit(text,(10,50))
+    pygame.display.flip()
+    clock.tick(60)
+pygame.quit()
