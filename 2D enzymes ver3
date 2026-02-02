@@ -1,0 +1,98 @@
+import pygame
+import pymunk
+import pymunk.pygame_util
+import random
+
+width,height=600,400
+fps=60
+
+S=1 #Substrate
+A=2 #Active site
+P=3 #Product
+
+pygame.init()
+screen=pygame.display.set_mode((width,height))
+clock=pygame.time.Clock()
+
+space=pymunk.Space()
+space.gravity=(0,0)
+
+draw=pymunk.pygame_util.DrawOptions(screen)
+
+def open_space(body):
+    x,y=body.position
+    body.position=(x%width,y%height)
+
+substrates=[]
+products=[]
+enzymes=[]
+
+def make_substrate():
+    body=pymunk.Body(1,pymunk.moment_for_circle(1,0,4))
+    body.position=random.uniform(0,width),random.uniform(0,height)
+    body.velocity=random.uniform(-200,200),random.uniform(-200,200)
+    shape=pymunk.Circle(body,4)
+    shape.elasticity=1
+    shape.collision_type=S
+    shape.color=(80,150,255,255)
+    space.add(body,shape)
+    substrates.append(shape)
+
+def make_product(pos,vel):
+    body=pymunk.Body(1,pymunk.moment_for_circle(1,0,4))
+    body.position=pos
+    body.velocity=vel
+    shape=pymunk.Circle(body,4)
+    shape.elasticity=1
+    shape.collision_type=P
+    shape.color=(255,200,80,255)
+    space.add(body,shape)
+    products.append(shape)
+
+def make_enzyme():
+    body=pymunk.Body(5,pymunk.moment_for_circle(5,0,10))
+    body.position=random.uniform(0,width),random.uniform(0,height)
+    body.velocity=random.uniform(-80,80),random.uniform(-80,80)
+    inactive=pymunk.Circle(body,10)
+    inactive.elasticity=1
+    inactive.color=(80,255,120,255)
+    active=pymunk.Circle(body,3,offset=(10,0))
+    active.elasticity=1
+    active.collision_type=A
+    active.color=(255,50,50,255)
+    space.add(body,inactive,active)
+    enzymes.append(body)
+
+def react(arbiter,space,data):
+    s,site = arbiter.shapes
+    pos=s.body.position
+    vel=s.body.velocity
+    space.remove(s,s.body)
+    substrates.remove(s)
+    make_product(pos,vel)
+    return False
+
+space.on_collision(S,A,begin=react)
+for _ in range(150):
+    make_substrate()
+for _ in range(5):
+    make_enzyme()
+
+running=True
+while running:
+    for e in pygame.event.get():
+        if e.type==pygame.QUIT:
+            running=False
+
+    space.step(1/fps)
+
+    for s in substrates + products:
+        open_space(s.body)
+    for e in enzymes:
+        open_space(e)
+    screen.fill((30,30,30))
+    space.debug_draw(draw)
+    pygame.display.flip()
+    clock.tick(fps)
+
+pygame.quit()
